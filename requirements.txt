@@ -1,0 +1,4 @@
+ttkbootstrap>=1.10.1
+tkintermapview>=0.0.1
+requests>=2.0.0
+geocoder>=1.38.1
