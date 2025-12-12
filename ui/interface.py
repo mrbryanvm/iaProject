@@ -1,7 +1,7 @@
 """
 Modern GUI for the Multi-Agent System using ttkbootstrap and tkintermapview.
 Interactive Real Map of Cochabamba with Street Routing (OSRM).
-Includes Fix for Marker Trails.
+Includes Fix for Marker Trails and Robust Input Validation.
 """
 
 import ttkbootstrap as ttk
@@ -10,6 +10,7 @@ import threading
 import tkintermapview
 from agents.shopper import ShopperAgent
 from data.map_data import MapData
+from collections import Counter
 
 class AgentUI(ttk.Window):
     def __init__(self):
@@ -171,17 +172,51 @@ class AgentUI(ttk.Window):
             )
 
     def start_simulation(self):
+        # 1. Input Validation and Logic Checks
+        MAX_AMOUNT = 20000.00
+        
         try:
-            amount = float(self.amount_entry.get())
+            amount_str = self.amount_entry.get().replace(',', '.') # Robustness
+            amount = float(amount_str)
+            
+            # CASE: Negative Amount
+            if amount < 0:
+                self.log_message("❌ Error: El monto no puede ser NEGATIVO.")
+                self.status_label.configure(text="MONTO NEGATIVO", bootstyle="danger")
+                return
+
+            # CASE: Zero Amount
+            if amount == 0:
+                self.log_message("⚠️ Error: El monto debe ser MAYOR a 0.")
+                self.status_label.configure(text="MONTO CERO", bootstyle="warning")
+                return
+            
+            # CASE: Excessive Amount
+            if amount > MAX_AMOUNT:
+                self.log_message(f"❌ Error: El monto excede el límite permitido ({MAX_AMOUNT} Bs).")
+                self.status_label.configure(text="MONTO EXCESIVO", bootstyle="danger")
+                return
+
+            # CASE: Fractional Pennies (Less than 0.01)
+            # Check if there are more than 2 decimal places
+            # Multiply by 100, round, subtract -> should be near 0
+            if abs(amount * 100 - round(amount * 100)) > 0.001:
+                self.log_message("⚠️ Error: Ingrese un monto con máximo 2 decimales (ej: 50.10).")
+                self.status_label.configure(text="DECIMALES INVÁLIDOS", bootstyle="warning")
+                return
+            
             target = self.target_var.get()
             target_coords = self.map_data.get_coordinates(target)
             if not target_coords:
                 self.log_message(f"Error: Coordenadas no encontradas para {target}")
                 return
+
         except ValueError:
-            self.log_message("Error: Monto inválido.")
+            self.log_message("❌ Error: Ingrese un número válido.")
+            self.status_label.configure(text="MONTO INVÁLIDO", bootstyle="danger")
             return
 
+        # 2. Start Logic if Validation Passed
         self.start_btn.configure(state=DISABLED, text="Simulando...")
         self.log_text.delete(1.0, END)
         self.receipt_tree.delete(*self.receipt_tree.get_children())
@@ -189,7 +224,6 @@ class AgentUI(ttk.Window):
         
         if self.path_line: self.path_line.delete()
         
-        # Reset agent marker for new run
         if self.current_agent_marker: 
             self.current_agent_marker.delete()
             self.current_agent_marker = None
@@ -222,9 +256,16 @@ class AgentUI(ttk.Window):
         self.start_btn.configure(state=NORMAL, text="▶ INICIAR SIMULACIÓN")
         if cart:
             total = 0
-            for item in cart:
-                self.receipt_tree.insert("", END, values=("1", item['name'], f"{item['price']:.2f}"))
-                total += item['price']
+            # Group items by name
+            cart_counter = Counter([item['name'] for item in cart])
+            cart_prices = {item['name']: item['price'] for item in cart}
+            
+            for name, qty in cart_counter.items():
+                unit_price = cart_prices[name]
+                subtotal = unit_price * qty
+                self.receipt_tree.insert("", END, values=(f"{qty}", name, f"{subtotal:.2f}"))
+                total += subtotal
+                
             self.receipt_tree.insert("", END, values=("", "TOTAL", f"{total:.2f}"))
 
         if success:

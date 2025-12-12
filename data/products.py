@@ -406,5 +406,6 @@ PRODUCTS = [
 {"name": "Barras Energéticas (caja 6)", "price": 35.00},
 {"name": "Agua Tónica Schweppes", "price": 8.00},
 {"name": "Ginger Ale", "price": 9.00},
-{"name": "Limonada Preparada 1L", "price": 6.50}
+{"name": "Limonada Preparada 1L", "price": 6.50},
+{"name": "Mini chicle", "price": 0.01}
 ]
