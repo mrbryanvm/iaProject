@@ -15,7 +15,7 @@ from collections import Counter
 class AgentUI(ttk.Window):
     def __init__(self):
         super().__init__(themename="flatly") 
-        self.title("Vale Navideño - AI Shopper (Cochabamba Real)")
+        self.title("Vale Navideño")
         self.geometry("1400x900")
         
         self.map_data = MapData()
@@ -33,7 +33,7 @@ class AgentUI(ttk.Window):
         # Header 
         header = ttk.Frame(self, bootstyle="primary", padding=15)
         header.pack(fill=X)
-        ttk.Label(header, text="🎄 Vale Navideño: Sistema Multi-Agente 🎄", 
+        ttk.Label(header, text="🎄 Vale Navideño 🎄", 
                  font=("Segoe UI", 20, "bold"), bootstyle="inverse-primary").pack()
 
         main_frame = ttk.Frame(self, padding=15)
