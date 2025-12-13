@@ -1,6 +1,6 @@
 """
 Agente Cajero: Valida la transacción.
-Tipo: Agente Reflejo Simple
+Tipo: Agente Reactivo Simple
 """
 
 class CashierAgent:
