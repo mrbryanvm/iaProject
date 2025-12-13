@@ -100,13 +100,18 @@ class AgentUI(ttk.Window):
         right_panel = ttk.Labelframe(main_frame, text="Factura / Recibo", padding=15)
         right_panel.pack(side=LEFT, fill=Y, padx=10, ipadx=5)
         
-        columns = ("qty", "prod", "price")
+        columns = ("qty", "unit_price", "prod", "price")
         self.receipt_tree = ttk.Treeview(right_panel, columns=columns, show="headings", height=20)
         
         self.receipt_tree.heading("qty", text="#")
         self.receipt_tree.column("qty", width=30, anchor=CENTER)
+
+        self.receipt_tree.heading("unit_price", text="PU")
+        self.receipt_tree.column("unit_price", width=60, anchor=E)
+
         self.receipt_tree.heading("prod", text="Producto")
         self.receipt_tree.column("prod", width=180, anchor=W)
+
         self.receipt_tree.heading("price", text="Bs")
         self.receipt_tree.column("price", width=80, anchor=E)
         
@@ -263,10 +268,20 @@ class AgentUI(ttk.Window):
             for name, qty in cart_counter.items():
                 unit_price = cart_prices[name]
                 subtotal = unit_price * qty
-                self.receipt_tree.insert("", END, values=(f"{qty}", name, f"{subtotal:.2f}"))
+
+                self.receipt_tree.insert(
+                    "",
+                    END,
+                    values=(
+                        f"{qty}",
+                        f"{unit_price:.2f}",
+                        name,
+                        f"{subtotal:.2f}"
+                    )
+                )
                 total += subtotal
                 
-            self.receipt_tree.insert("", END, values=("", "TOTAL", f"{total:.2f}"))
+            self.receipt_tree.insert("", END, values=("","", "TOTAL", f"{total:.2f}"))
 
         if success:
             self.status_label.configure(text="¡ÉXITO!", bootstyle="success")
