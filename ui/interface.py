@@ -10,6 +10,7 @@ import threading
 import tkintermapview
 from agents.shopper import ShopperAgent
 from data.map_data import MapData
+from data.products import PRODUCTS
 from collections import Counter
 
 class AgentUI(ttk.Window):
@@ -27,6 +28,13 @@ class AgentUI(ttk.Window):
         self.start_marker = None
         self.path_line = None
         
+        # Guardar stock inicial para reset
+        self.initial_stock = {p['name']: p.get('stock', 0) for p in PRODUCTS}
+        
+        # Estado de última compra (para resaltar en inventario)
+        self.last_purchase_counts = {}
+        self.refresh_inventory_callback = None
+
         self._init_ui()
 
     def _init_ui(self):
@@ -65,7 +73,10 @@ class AgentUI(ttk.Window):
         self.start_info_label.pack(anchor=W, pady=(5, 15))
 
         self.start_btn = ttk.Button(config_frame, text="▶ INICIAR SIMULACIÓN", command=self.start_simulation, bootstyle="success")
-        self.start_btn.pack(fill=X, pady=10, ipady=5)
+        self.start_btn.pack(fill=X, pady=5, ipady=5)
+
+        self.inv_btn = ttk.Button(config_frame, text="📦 Ver Inventario", command=self.open_inventory_window, bootstyle="info-outline")
+        self.inv_btn.pack(fill=X, pady=(0, 10))
 
         # Registros
         log_frame = ttk.Labelframe(left_panel, text="Registro (Logs)", padding=10)
@@ -283,10 +294,156 @@ class AgentUI(ttk.Window):
                 
             self.receipt_tree.insert("", END, values=("","", "TOTAL", f"{total:.2f}"))
 
+            # Actualizar estado de última compra
+            self.last_purchase_counts = cart_counter
+            
+            # Auto-refrescar ventana de inventario si está abierta
+            if self.refresh_inventory_callback:
+                try:
+                    self.refresh_inventory_callback()
+                except Exception:
+                    self.refresh_inventory_callback = None # Ventana cerrada probablemente
+
         if success:
             self.status_label.configure(text="¡ÉXITO!", bootstyle="success")
         else:
             self.status_label.configure(text="FALLÓ", bootstyle="danger")
+
+    def open_inventory_window(self):
+        inv_window = ttk.Toplevel(self)
+        inv_window.title("Inventario de Productos")
+        inv_window.geometry("700x600") # Un poco más ancho para la nueva columna
+        
+        # Título
+        ttk.Label(inv_window, text="Estado de Stock", font=("Segoe UI", 14, "bold"), bootstyle="primary").pack(pady=10)
+        
+        # Tabla
+        cols = ("prod", "price", "stock", "last_qty")
+        tree = ttk.Treeview(inv_window, columns=cols, show="headings", height=20)
+        
+        tree.heading("prod", text="Producto")
+        tree.column("prod", width=280, anchor=W)
+        
+        tree.heading("price", text="Precio")
+        tree.column("price", width=80, anchor=E)
+        
+        tree.heading("stock", text="Stock")
+        tree.column("stock", width=80, anchor=CENTER)
+
+        tree.heading("last_qty", text="Últ. Compra")
+        tree.column("last_qty", width=100, anchor=CENTER)
+        
+        # Scrollbar
+        scroll = ttk.Scrollbar(inv_window, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        
+        tree.pack(side=TOP, fill=BOTH, expand=YES, padx=10)
+        scroll.place(relx=0.95, rely=0.1, relheight=0.8, anchor=NE)
+        
+        # Llenar datos con lógica mejorada
+        def load_data():
+            if not tree.winfo_exists(): return
+
+            tree.delete(*tree.get_children())
+            
+            # Criterio de Ordenamiento:
+            # 1. Productos comprados en la última vez (last_qty > 0) -> PRIMERO
+            # 2. Stock agotado (stock == 0) -> DESPUÉS (para llamar la atención)
+            # 3. Nombre alfabético
+            
+            def sort_key(p):
+                name = p['name']
+                last_qty = self.last_purchase_counts.get(name, 0)
+                stock = p.get('stock', 0)
+                
+                # Tupla de ordenamiento (Mayor prioridad = menor valor de tupla para sort ascendente? No, queremos descendente en importancia)
+                # Queremos: Comprados primero.
+                # Python sort es estable.
+                # Usaremos valores negativos para invertir el orden natural en campos numéricos si queremos descendente
+                
+                is_purchased = last_qty > 0
+                is_out_of_stock = stock == 0
+                
+                # Prioridad 1: Comprado (True > False). Queremos True primero -> -1
+                p1 = -1 if is_purchased else 0
+                
+                # Prioridad 2: Si NO comprado, agotados primero? O simplemente alfabético.
+                # El usuario pidió "ordenarlos por orden" de lo comprado.
+                
+                return (p1, name) # Simple: Comprados arriba, luego alfabético
+
+            sorted_products = sorted(PRODUCTS, key=sort_key)
+            
+            # También podemos hacer sort manual más específico si queremos que dentro de comprados se ordenen por cantidad
+            # sorted_products.sort(key=lambda x: self.last_purchase_counts.get(x['name'], 0), reverse=True) 
+            # Pero eso mezclaría nombres. Mejor mantenerlos agrupados arriba.
+            
+            # Refinamiento: Productos comprados arriba (ordenados por cantidad desc), resto abajo (alfabético)
+            purchased = [p for p in PRODUCTS if self.last_purchase_counts.get(p['name'], 0) > 0]
+            others = [p for p in PRODUCTS if self.last_purchase_counts.get(p['name'], 0) == 0]
+            
+            purchased.sort(key=lambda x: self.last_purchase_counts.get(x['name'], 0), reverse=True)
+            others.sort(key=lambda x: x['name'])
+            
+            final_list = purchased + others
+
+            for p in final_list:
+                name = p['name']
+                price = p['price']
+                stock = p.get('stock', 0)
+                last_qty = self.last_purchase_counts.get(name, 0)
+                
+                last_qty_str = str(last_qty) if last_qty > 0 else "-"
+                
+                # Tags
+                tags = []
+                if last_qty > 0: tags.append("purchased")
+                
+                if stock == 0: tags.append("critical")
+                elif stock < 10: tags.append("low")
+                else: tags.append("normal") # default
+                
+                tree.insert("", END, values=(name, f"{price:.2f}", stock, last_qty_str), tags=tuple(tags))
+            
+            # Configuración de Colores
+            # Prioridad de colores: Treeview usa la última configuración o la jerarquía? 
+            # En Tkinter, el orden en tags define. "purchased" debe prevalecer si queremos que se vea verde.
+            
+            tree.tag_configure("critical", foreground="#d32f2f") # Texto Rojo (Agotado)
+            tree.tag_configure("low", foreground="#ef6c00") # Texto Naranja (Bajo)
+            tree.tag_configure("normal", foreground="black")
+            
+            # Resaltado de compra (Fondo)
+            tree.tag_configure("purchased", background="#c8e6c9") # Verde suave estilo Excel
+
+        load_data()
+        
+        # Registrar callback para auto-refresh
+        self.refresh_inventory_callback = load_data
+        
+        # Limpiar callback al cerrar
+        def on_close():
+            self.refresh_inventory_callback = None
+            inv_window.destroy()
+            
+        inv_window.protocol("WM_DELETE_WINDOW", on_close)
+        
+        # Botones
+        btn_frame = ttk.Frame(inv_window, padding=10)
+        btn_frame.pack(fill=X, side=BOTTOM)
+        
+        def reset_stock_action():
+            for p in PRODUCTS:
+                p['stock'] = self.initial_stock.get(p['name'], 0)
+            
+            # Limpiar historial de "última compra" al resetear stock para evitar confusión?
+            # O mantenerlo? Mejor mantenerlo, solo reseteamos stock.
+            load_data()
+            self.log_message("Sistema: Stock reseteado a valores originales.")
+            
+        ttk.Button(btn_frame, text="🔄 Refrescar", bootstyle="info", command=load_data).pack(side=LEFT, fill=X, expand=YES, padx=5)
+        ttk.Button(btn_frame, text="⚙️ Resetear Stock", bootstyle="warning", command=reset_stock_action).pack(side=LEFT, fill=X, expand=YES, padx=5)
+        ttk.Button(btn_frame, text="Cerrar", bootstyle="secondary", command=on_close).pack(side=RIGHT, fill=X, expand=YES, padx=5)
 
 if __name__ == "__main__":
     app = AgentUI()
