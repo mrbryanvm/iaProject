@@ -34,18 +34,41 @@ class OptimizerAgent:
             
             for item in self.main_items:
                 # Agregar cantidad aleatoria (0-3) de este artículo principal, si cabe
+
+                """
                 if current_sum + item['price'] <= target_amount:
                      # Chequeo codicioso simple: Agregar 1 unidad
                      cart.append(item)
                      current_sum += item['price']
-                     
-                     # Optimización: Si está muy lejos del objetivo, agregar más del mismo artículo
-                     if target_amount - current_sum > 1000: # ¿Brecha enorme? Agregar múltiples
+                """
+
+                remaining = target_amount - current_sum
+
+                # Máximo de unidades posibles de este producto
+                max_qty = int(remaining / item['price'])
+
+                if max_qty <= 0:
+                    continue
+
+                # 🔥 CLAVE: favorecer repetición
+                # Elegir entre 1 y max_qty, con tope razonable
+                qty = random.randint(1, min(max_qty, 5))
+
+                for _ in range(qty):
+                    cart.append(item)
+                    current_sum += item['price']
+
+
+                    # Optimización: Si está muy lejos del objetivo, agregar más del mismo artículo
+                    if target_amount - current_sum > 1000: # ¿Brecha enorme? Agregar múltiples
                          qty = int((target_amount - current_sum) / item['price'])
                          qty = min(qty, 10) # Limitar a 10 máx por iteración para mantener variedad
                          for _ in range(qty):
                              cart.append(item)
                              current_sum += item['price']
+
+                
+        
 
             # Fase 2: Relleno Perfecto (Cambio de Moneda)
             # Intentar llenar la brecha restante EXACTAMENTE usando artículos de relleno
