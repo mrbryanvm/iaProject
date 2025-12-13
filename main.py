@@ -1,5 +1,5 @@
 """
-Entry point for the Multi-Agent System IA Project.
+Punto de entrada para el Proyecto de IA de Sistema Multi-Agente.
 """
 
 from ui.interface import AgentUI

@@ -1,6 +1,6 @@
 """
-Shopper Agent: Coordinates the shopping process.
-Type: Goal-Based Agent (Orchestrator)
+Agente Comprador: Coordina el proceso de compra.
+Tipo: Agente Basado en Objetivos (Orquestador)
 """
 
 import time
@@ -16,7 +16,7 @@ class ShopperAgent:
         self.planner = PlannerAgent(self.map_data)
         self.optimizer = OptimizerAgent(PRODUCTS)
         self.cashier = CashierAgent()
-        self.log_callback = log_callback # Function to send logs to UI
+        self.log_callback = log_callback # Función para enviar logs a la UI
 
     def log(self, message):
         if self.log_callback:
@@ -26,9 +26,9 @@ class ShopperAgent:
 
     def run_simulation(self, start_coords, target_name, voucher_amount, move_callback=None):
         """
-        Full simulation flow.
-        start_coords: (lat, lon) tuple
-        target_name: str (Key in map_data.locations)
+        Flujo completo de simulación.
+        start_coords: tupla (lat, lon)
+        target_name: str (Clave en map_data.locations)
         """
         target_coords = self.map_data.get_coordinates(target_name)
         if not target_coords:
@@ -39,7 +39,7 @@ class ShopperAgent:
         self.log(f"Start: {start_coords[0]:.4f}, {start_coords[1]:.4f}")
         self.log(f"Goal: {target_name} ({voucher_amount} Bs)")
 
-        # 1. Planning Phase (OSRM)
+        # 1. Fase de Planificación (OSRM)
         self.log("Shopper: Requesting real street route from OSRM... (Please Wait)")
         path = self.planner.find_path(start_coords, target_coords)
         
@@ -49,10 +49,10 @@ class ShopperAgent:
 
         self.log(f"Planner: Real street path found with {len(path)} waypoints.")
         
-        # 2. Movement Phase
+        # 2. Fase de Movimiento
         self.log("Shopper: Moving along the route...")
         
-        # Animation speed control - skip points to speed up if path is very long
+        # Control de velocidad de animación - saltar puntos para acelerar si la ruta es muy larga
         step = 1
         if len(path) > 100: step = 5
         elif len(path) > 50: step = 2
@@ -60,19 +60,19 @@ class ShopperAgent:
         for i in range(0, len(path), step):
             node = path[i]
             if move_callback:
-                move_callback(node) # UI update: move marker
+                move_callback(node) # Actualización UI: mover marcador
             
-            # Fast update for smooth animation
+            # Actualización rápida para animación fluida
             time.sleep(0.05) 
         
-        # Ensure we hit the final point
+        # Asegurar que llegamos al punto final
         if move_callback: move_callback(path[-1])
         
         self.log(f"Shopper: Arrived at {target_name}")
         self.log("Shopper: Selecting products...")
 
-        # 3. Optimization Phase
-        # Simulate thinking time
+        # 3. Fase de Optimización
+        # Simular tiempo de pensamiento
         time.sleep(1.0)
         cart = self.optimizer.optimize_cart(voucher_amount)
 
@@ -84,7 +84,7 @@ class ShopperAgent:
         for item in cart:
             self.log(f"  + Added: {item['name']} ({item['price']} Bs)")
 
-        # 4. Checkout Phase
+        # 4. Fase de Pago (Caja)
         self.log("Shopper: Paying at Cashier...")
         success, total = self.cashier.checkout(cart, voucher_amount)
 

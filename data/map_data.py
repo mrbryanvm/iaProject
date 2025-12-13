@@ -1,17 +1,17 @@
 """
-Data module for map representation of Cochabamba.
-Includes specific GPS coordinates provided by USER (Corrected Set).
+Módulo de datos para la representación del mapa de Cochabamba.
+Incluye coordenadas GPS específicas proporcionadas por el USUARIO (Set Corregido).
 """
 
 import math
 
 class MapData:
     def __init__(self):
-        # Nodes: Name -> (Latitude, Longitude)
+        # Nodos: Nombre -> (Latitud, Longitud)
         self.locations = {
-            # --- HIPERMAXI BRANCHES (USER CORRECTED COORDINATES) ---
+            # --- SUCURSALES HIPERMAXI (COORDENADAS CORREGIDAS POR USUARIO) ---
             
-            # 1. Torres Sofer (Av. Oquendo 630) - Unchanged from previous user input
+            # 1. Torres Sofer (Av. Oquendo 630) - Sin cambios desde entrada previa
             'Hipermaxi Torres Sofer': (-17.384523, -66.150682), 
 
             # 2. El Prado (CORRECTED)
@@ -26,14 +26,14 @@ class MapData:
             # 5. Av. Villazón – Sacaba (CORRECTED)
             'Hipermaxi Sacaba': (-17.3819, -66.1190),
 
-            # 6. Blanco Galindo (Av. Blanco Galindo 2029) - Unchanged from previous user input
+            # 6. Blanco Galindo (Av. Blanco Galindo 2029) - Sin cambios desde entrada previa
             'Hipermaxi Blanco Galindo': (-17.393820, -66.182200),
 
             # 7. Panamericana (CORRECTED)
             'Hipermaxi Panamericana': (-17.4192, -66.1582),
 
 
-            # --- NAVIGATION HUBS ---
+            # --- CENTROS DE NAVEGACIÓN ---
             'Plaza 14 de Septiembre': (-17.3938, -66.1570), 
         }
 

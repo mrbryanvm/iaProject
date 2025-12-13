@@ -1,5 +1,5 @@
 """
-Data module containing available products and their prices.
+Módulo de datos que contiene productos disponibles y sus precios.
 Catálogo realista basado en productos típicos de supermercados Hipermaxi en Bolivia.
 """
 
