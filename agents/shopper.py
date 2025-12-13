@@ -32,25 +32,25 @@ class ShopperAgent:
         """
         target_coords = self.map_data.get_coordinates(target_name)
         if not target_coords:
-            self.log(f"Error: Target {target_name} not found.")
+            self.log(f"Error: Destino {target_name} no encontrado.")
             return None, False
 
-        self.log(f"--- Simulation Started ---")
-        self.log(f"Start: {start_coords[0]:.4f}, {start_coords[1]:.4f}")
-        self.log(f"Goal: {target_name} ({voucher_amount} Bs)")
+        self.log(f"--- Simulación Iniciada ---")
+        self.log(f"Inicio: {start_coords[0]:.4f}, {start_coords[1]:.4f}")
+        self.log(f"Meta: {target_name} ({voucher_amount} Bs)")
 
         # 1. Fase de Planificación (OSRM)
-        self.log("Shopper: Requesting real street route from OSRM... (Please Wait)")
+        self.log("Comprador: Solicitando ruta real a OSRM... (Por favor espere)")
         path = self.planner.find_path(start_coords, target_coords)
         
         if not path or len(path) < 2:
-            self.log("Shopper: Could not calculate path.")
+            self.log("Comprador: No se pudo calcular la ruta.")
             return None, False
 
-        self.log(f"Planner: Real street path found with {len(path)} waypoints.")
+        self.log(f"Planificador: Ruta real encontrada con {len(path)} puntos de paso.")
         
         # 2. Fase de Movimiento
-        self.log("Shopper: Moving along the route...")
+        self.log("Comprador: Moviéndose a lo largo de la ruta...")
         
         # Control de velocidad de animación - saltar puntos para acelerar si la ruta es muy larga
         step = 1
@@ -68,8 +68,8 @@ class ShopperAgent:
         # Asegurar que llegamos al punto final
         if move_callback: move_callback(path[-1])
         
-        self.log(f"Shopper: Arrived at {target_name}")
-        self.log("Shopper: Selecting products...")
+        self.log(f"Comprador: Llegada a {target_name}")
+        self.log("Comprador: Seleccionando productos...")
 
         # 3. Fase de Optimización
         # Simular tiempo de pensamiento
@@ -77,20 +77,20 @@ class ShopperAgent:
         cart = self.optimizer.optimize_cart(voucher_amount)
 
         if not cart:
-            self.log("Optimizer: Failed to find exact match for voucher amount.")
+            self.log("Optimizador: Fallo al encontrar coincidencia exacta para el monto del vale.")
             return None, False
         
-        self.log("Optimizer: Cart filled!")
+        self.log("Optimizador: ¡Vale agotado!")
         for item in cart:
-            self.log(f"  + Added: {item['name']} ({item['price']} Bs)")
+            self.log(f"  + Agregado: {item['name']} ({item['price']} Bs)")
 
         # 4. Fase de Pago (Caja)
-        self.log("Shopper: Paying at Cashier...")
+        self.log("Comprador: Pagando en Caja...")
         success, total = self.cashier.checkout(cart, voucher_amount)
 
         if success:
-            self.log(f"Cashier: Payment Accepted! Total: {total:.2f}")
+            self.log(f"Cajero: ¡Pago Aceptado! Total: {total:.2f}")
             return cart, True
         else:
-            self.log(f"Cashier: Payment Rejected. Total {total:.2f} != Voucher {voucher_amount}")
+            self.log(f"Cajero: Pago Rechazado. Total {total:.2f} != Vale {voucher_amount}")
             return cart, False

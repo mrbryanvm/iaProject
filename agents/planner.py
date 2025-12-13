@@ -40,7 +40,7 @@ class PlannerAgent:
                     return path
                 
         except Exception as e:
-            print(f"Error fetching OSRM path: {e}")
+            print(f"Error al obtener ruta OSRM: {e}")
             
         # Alternativa: Línea recta si falla la API
         return [start_coords, goal_coords]

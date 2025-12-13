@@ -167,7 +167,7 @@ class AgentUI(ttk.Window):
         else:
             self.current_agent_marker = self.map_widget.set_marker(
                 coords[0], coords[1], 
-                text="Shopper", 
+                text="Comprador", 
                 marker_color_outside="#FBC02D" 
             )
 
@@ -245,7 +245,7 @@ class AgentUI(ttk.Window):
             self.after(0, lambda: self._finalize_ui(cart, success))
         except Exception as e:
             print(f"Logic Error: {e}")
-            self.log_message(f"Critical Error: {e}")
+            self.log_message(f"Error Crítico: {e}")
             self.after(0, lambda: self._reset_ui_state())
 
     def _reset_ui_state(self):
