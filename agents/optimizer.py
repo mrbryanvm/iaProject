@@ -50,22 +50,16 @@ class OptimizerAgent:
                 if max_qty <= 0:
                     continue
 
-                # 🔥 CLAVE: favorecer repetición
-                # Elegir entre 1 y max_qty, con tope razonable
-                qty = random.randint(1, min(max_qty, 5))
+                if target_amount - current_sum > 1000:
+                    # Modo Acelerado: Brecha grande, agregar más unidades pero aleatoriamente (1-10)
+                    qty = random.randint(1, min(max_qty, 10))
+                else:
+                    # Modo Normal: Variedad, agregar pocas unidades (1-5)
+                    qty = random.randint(1, min(max_qty, 5))
 
                 for _ in range(qty):
                     cart.append(item)
                     current_sum += item['price']
-
-
-                    # Optimización: Si está muy lejos del objetivo, agregar más del mismo artículo
-                    if target_amount - current_sum > 1000: # ¿Brecha enorme? Agregar múltiples
-                         qty = int((target_amount - current_sum) / item['price'])
-                         qty = min(qty, 10) # Limitar a 10 máx por iteración para mantener variedad
-                         for _ in range(qty):
-                             cart.append(item)
-                             current_sum += item['price']
 
                 
         
