@@ -108,30 +108,228 @@ class AgentUI(ttk.Window):
 
 
         # --- PANEL DERECHO ---
-        right_panel = ttk.Labelframe(main_frame, text="Factura / Recibo", padding=15)
+        right_panel = ttk.Labelframe(main_frame, text="Acciones dentro el supermercado: Opciones/Recoleccion/Factura", padding=10)
         right_panel.pack(side=LEFT, fill=Y, padx=10, ipadx=5)
-        
+
+        # ===== ZONA SUPERIOR (SCROLLABLE) =====
+        content_frame = ttk.Frame(right_panel)
+        content_frame.pack(fill=BOTH, expand=YES)
+
+        canvas = ttk.Canvas(content_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(content_frame, orient=VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scrollbar.pack(side=RIGHT, fill=Y)
+        canvas.pack(side=LEFT, fill=BOTH, expand=YES)
+
+        scrollable_frame = ttk.Frame(canvas)
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        # ===== OPCIONES =====
+        self.options_frame = ttk.Frame(scrollable_frame)
+        self.options_frame.pack(fill=BOTH, expand=YES)
+
+        ttk.Label(
+            self.options_frame,
+            text="Esperando cálculo de opciones...",
+            font=("Segoe UI", 12, "italic"),
+            bootstyle="secondary"
+        ).pack(pady=20)
+
+        # ===== FACTURA =====
+        self.receipt_frame = ttk.Frame(scrollable_frame)
+
         columns = ("qty", "unit_price", "prod", "price")
-        self.receipt_tree = ttk.Treeview(right_panel, columns=columns, show="headings", height=20)
-        
+        self.receipt_tree = ttk.Treeview(
+            self.receipt_frame,
+            columns=columns,
+            show="headings",
+            height=18
+        )
+
         self.receipt_tree.heading("qty", text="#")
         self.receipt_tree.column("qty", width=30, anchor=CENTER)
-
         self.receipt_tree.heading("unit_price", text="PU")
         self.receipt_tree.column("unit_price", width=60, anchor=E)
-
         self.receipt_tree.heading("prod", text="Producto")
         self.receipt_tree.column("prod", width=180, anchor=W)
-
         self.receipt_tree.heading("price", text="Bs")
         self.receipt_tree.column("price", width=80, anchor=E)
-        
+
         self.receipt_tree.pack(fill=BOTH, expand=YES, pady=10)
-        
+
+        # ===== ZONA INFERIOR FIJA (ESTADO) =====
         self.status_frame = ttk.Frame(right_panel, padding=10, bootstyle="light")
-        self.status_frame.pack(fill=X, pady=10)
-        self.status_label = ttk.Label(self.status_frame, text="ESPERANDO...", font=("Segoe UI", 14, "bold"), bootstyle="secondary", anchor=CENTER)
+        self.status_frame.pack(fill=X, side=BOTTOM)
+
+        self.status_label = ttk.Label(
+            self.status_frame,
+            text="LISTO",
+            font=("Segoe UI", 14, "bold"),
+            bootstyle="secondary",
+            anchor=CENTER
+        )
         self.status_label.pack(fill=X)
+
+    def reset_right_panel(self):
+        # 🔹 Limpiar opciones anteriores
+        for w in self.options_frame.winfo_children():
+            w.destroy()
+
+        # 🔹 Mensaje por defecto
+        ttk.Label(
+            self.options_frame,
+            text="Esperando cálculo de opciones...",
+            font=("Segoe UI", 12, "italic"),
+            bootstyle="secondary"
+        ).pack(pady=20)
+
+        # 🔹 Mostrar opciones / ocultar factura
+        self.options_frame.pack(fill=BOTH, expand=YES)
+        self.receipt_frame.pack_forget()
+
+        # 🔹 Limpiar factura
+        self.receipt_tree.delete(*self.receipt_tree.get_children())
+
+    def select_option(self, option):
+        self.log_message("Usuario eligió una opción de compra.")
+        self.options_frame.pack_forget()
+        self.receipt_frame.pack(fill=BOTH, expand=YES)
+
+        voucher_amount = float(self.amount_entry.get())
+
+        # 🔹 ADAPTAR FORMATO PARA EL RECOLECTOR
+        recolector_option = []
+        for item in option["items"]:
+            recolector_option.append({
+                "name": item["name"],
+                "qty": item["qty"],
+                "price": item["unit_price"]
+            })
+
+        # 🔹 Ejecutar compra
+        cart, success = self.shopper.finalize_purchase(
+            recolector_option,
+            voucher_amount
+        )
+
+        # 🔹 Mostrar resultado
+        self.show_receipt(cart)
+
+        # 🔹 ACTUALIZAR INVENTARIO
+        counter = Counter([p["name"] for p in cart])
+        self.last_purchase_counts = counter
+
+        if self.refresh_inventory_callback:
+            try:
+                self.refresh_inventory_callback()
+            except Exception:
+                self.refresh_inventory_callback = None
+
+        # 🔹 ACTUALIZAR ESTADO FINAL
+        if success:
+            self.status_label.configure(
+                text="¡COMPRA FINALIZADA!",
+                bootstyle="success"
+            )
+            self.log_message("Compra finalizada correctamente.")
+        else:
+            self.status_label.configure(
+                text="ERROR EN COMPRA",
+                bootstyle="danger"
+            )
+            self.log_message("Error en la compra.")
+
+        # 🔥 ESTO FALTABA
+        self.start_btn.configure(
+            state=NORMAL,
+            text="▶ INICIAR SIMULACIÓN"
+        )
+
+
+
+    def refresh_options(self):
+        self.log_message("Refrescando opciones del optimizador...")
+        options = self.shopper.request_purchase_options(
+            float(self.amount_entry.get())
+        )
+        self.show_optimizer_options(options)
+
+    def show_optimizer_options(self, options):
+        # Limpiar frame
+        for w in self.options_frame.winfo_children():
+            w.destroy()
+
+        ttk.Label(
+            self.options_frame,
+            text="Opciones de Compra",
+            font=("Segoe UI", 14, "bold"),
+            bootstyle="primary"
+        ).pack(pady=10)
+
+        for idx, option in enumerate(options, start=1):
+            box = ttk.Labelframe(
+                self.options_frame,
+                text=f"Opción {idx}",
+                padding=10
+            )
+            box.pack(fill=X, pady=8)
+
+            # Mostrar productos ORDENADOS alfabéticamente
+            for item in sorted(option["items"], key=lambda x: x["name"]):
+                ttk.Label(
+                    box,
+                    text=f"- {item['name']}  x{item['qty']}  "
+                        f"(Bs {item['unit_price']:.2f} c/u → Bs {item['total_price']:.2f})",
+                    font=("Segoe UI", 9)
+                ).pack(anchor=W)
+
+            ttk.Label(
+                box,
+                text=f"Total: Bs {option['total']:.2f}",
+                font=("Segoe UI", 10, "bold")
+            ).pack(anchor=E, pady=5)
+
+            ttk.Button(
+                box,
+                text="Elegir esta opción",
+                bootstyle="success",
+                command=lambda opt=option: self.select_option(opt)
+            ).pack(fill=X, pady=5)
+
+        ttk.Button(
+            self.options_frame,
+            text="🔄 Refrescar Opciones",
+            bootstyle="info",
+            command=self.refresh_options
+        ).pack(fill=X, pady=10)
+
+    def show_receipt(self, cart):
+        self.receipt_frame.pack(fill=BOTH, expand=YES)
+
+        self.receipt_tree.delete(*self.receipt_tree.get_children())
+
+        total = 0
+        counter = Counter([p["name"] for p in cart])
+
+        for name, qty in counter.items():
+            price = next(p["price"] for p in PRODUCTS if p["name"] == name)
+            subtotal = price * qty
+            total += subtotal
+
+            self.receipt_tree.insert(
+                "",
+                END,
+                values=(qty, f"{price:.2f}", name, f"{subtotal:.2f}")
+            )
+
+        self.receipt_tree.insert("", END, values=("", "", "TOTAL", f"{total:.2f}"))
+        self.status_label.configure(text="¡COMPRA CONFIRMADA!", bootstyle="success")
 
     def draw_destinations(self):
         self.map_widget.delete_all_marker()
@@ -188,6 +386,13 @@ class AgentUI(ttk.Window):
             )
 
     def start_simulation(self):
+        self.reset_right_panel()
+
+        self.status_label.configure(
+            text="CALCULANDO RUTA...",
+            bootstyle="warning"
+        )
+
         # 1. Validación de Entrada y Chequeos Lógicos
         MAX_AMOUNT = 20000.00
         
@@ -256,9 +461,17 @@ class AgentUI(ttk.Window):
             if path:
                 self.after(0, lambda: self.draw_path_on_map(path))
             
-            cart, success = self.shopper.run_simulation(start_coords, target_name, amount, move_callback=self.update_agent_position)
-            
-            self.after(0, lambda: self._finalize_ui(cart, success))
+            result, state = self.shopper.run_simulation(
+                start_coords, target_name, amount,
+                move_callback=self.update_agent_position
+            )
+
+            if state == "WAITING_SELECTION":
+                self.after(0, lambda: self.show_optimizer_options(result))
+                return
+
+            self.after(0, lambda: self._finalize_ui(result, state))
+    
         except Exception as e:
             print(f"Logic Error: {e}")
             self.log_message(f"Error Crítico: {e}")

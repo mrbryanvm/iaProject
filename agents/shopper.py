@@ -7,6 +7,7 @@ import time
 from .planner import PlannerAgent
 from .optimizer import OptimizerAgent
 from .cashier import CashierAgent
+from .recolector import RecolectorAgent
 from data.map_data import MapData
 from data.products import PRODUCTS
 
@@ -16,7 +17,15 @@ class ShopperAgent:
         self.planner = PlannerAgent(self.map_data)
         self.optimizer = OptimizerAgent(PRODUCTS)
         self.cashier = CashierAgent()
+        self.recolector = RecolectorAgent()
         self.log_callback = log_callback # Función para enviar logs a la UI
+
+   
+
+    def request_purchase_options(self, voucher_amount):
+        return self.optimizer.generate_options(voucher_amount)
+    
+   
 
     def log(self, message):
         if self.log_callback:
@@ -71,6 +80,18 @@ class ShopperAgent:
         self.log(f"Comprador: Llegada a {target_name}")
         self.log("Comprador: Seleccionando productos...")
 
+        # 🔹 OPTIMIZADOR SOLO GENERA OPCIONES
+        options = self.optimizer.generate_options(voucher_amount)
+
+        if not options:
+            self.log("Optimizador: No se pudieron generar opciones.")
+            return None, False
+        
+        # ⛔ AQUÍ SE DETIENE EL FLUJO
+        # La UI ahora debe mostrar las opciones
+        return options, "WAITING_SELECTION"
+
+
         # 3. Fase de Optimización
         # Simular tiempo de pensamiento
         time.sleep(1.0)
@@ -94,3 +115,23 @@ class ShopperAgent:
         else:
             self.log(f"Cajero: Pago Rechazado. Total {total:.2f} != Vale {voucher_amount}")
             return cart, False
+        
+    def finalize_purchase(self, option, voucher_amount):
+            self.log("Comprador: Opción confirmada.")
+            self.log("Recolector: Iniciando recorrido interno...")
+
+            # Recolector agrega productos
+            cart = self.recolector.collect(option, log_callback=self.log)
+
+            # Confirmar stock
+            self.optimizer.commit_stock(cart)
+
+            self.log("Comprador: Pagando en caja...")
+            success, total = self.cashier.checkout(cart, voucher_amount)
+
+            if success:
+                self.log(f"Cajero: ¡Pago Aceptado! Total: {total:.2f}")
+                return cart, True
+            else:
+                self.log(f"Cajero: Pago Rechazado ({total:.2f})")
+                return cart, False
