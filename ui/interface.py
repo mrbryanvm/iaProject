@@ -889,7 +889,6 @@ class AgentUI(ttk.Window):
     def _run_logic(self, start_coords, target_name, amount):
         try:
             self.current_supermarket = target_name
-            self.after(0, lambda: self.show_internal_map_fullscreen(target_name))
 
             target_coords = self.map_data.get_coordinates(target_name)
             
@@ -904,6 +903,7 @@ class AgentUI(ttk.Window):
 
             if state == "WAITING_SELECTION":
                 self.after(0, lambda: self.show_optimizer_options(result))
+                self.after(0, lambda: self.show_internal_map_fullscreen(target_name)) 
                 return
 
             self.after(0, lambda: self._finalize_ui(result, state))
