@@ -22,7 +22,7 @@ class ShopperAgent:
         self.supermarket_name = ""  # Variable para almacenar el nombre del supermercado
 
     def request_purchase_options(self, voucher_amount):
-        return self.optimizer.generate_options(voucher_amount)
+        return self.optimizer.generate_options(voucher_amount, self.supermarket_name)
     
     def log(self, message):
         if self.log_callback:
