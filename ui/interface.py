@@ -11,6 +11,7 @@ import tkintermapview
 from agents.shopper import ShopperAgent
 from data.map_data import MapData
 from data.products import PRODUCTS
+from data.supermarket_maps import SUPERMARKET_MAPS
 from collections import Counter
 
 class AgentUI(ttk.Window):
@@ -27,6 +28,12 @@ class AgentUI(ttk.Window):
         self.current_agent_marker = None
         self.start_marker = None
         self.path_line = None
+
+        # Estado visual interno
+        self.internal_map_visible = False
+        self.internal_nodes = []
+        self.internal_paths = []
+        self.current_supermarket = None
         
         # Guardar stock inicial para reset
         self.initial_stock = {p['name']: p.get('stock', 0) for p in PRODUCTS}
@@ -44,17 +51,20 @@ class AgentUI(ttk.Window):
         # Encabezado
         header = ttk.Frame(self, bootstyle="primary", padding=15)
         header.pack(fill=X)
-        ttk.Label(header, text="🎄 Vale Navideño 🎄", 
-                  font=("Segoe UI", 20, "bold"), bootstyle="inverse-primary").pack()
+        ttk.Label(
+            header,
+            text="🎄 Vale Navideño 🎄",
+            font=("Segoe UI", 20, "bold"),
+            bootstyle="inverse-primary"
+        ).pack()
 
         main_frame = ttk.Frame(self, padding=15)
         main_frame.pack(fill=BOTH, expand=YES)
-        
+
         # --- PANEL IZQUIERDO ---
         left_panel = ttk.Labelframe(main_frame, text="Panel de Control", padding=15)
         left_panel.pack(side=LEFT, fill=Y, padx=10, ipadx=5)
-        
-        # Configuración
+
         config_frame = ttk.Labelframe(left_panel, text="Configuración", padding=15)
         config_frame.pack(fill=X, pady=10)
 
@@ -62,59 +72,115 @@ class AgentUI(ttk.Window):
         self.amount_entry = ttk.Entry(config_frame)
         self.amount_entry.insert(0, "50.0")
         self.amount_entry.pack(fill=X, pady=(5, 15))
-        
+
         ttk.Label(config_frame, text="Sucursal Destino (Meta):", font=("Segoe UI", 10)).pack(anchor=W)
         self.target_var = ttk.StringVar()
         branches = [k for k in self.map_data.locations.keys() if "Hipermaxi" in k]
-        self.target_combo = ttk.Combobox(config_frame, textvariable=self.target_var, values=branches, state="readonly")
-        if branches: self.target_combo.current(0)
+        self.target_combo = ttk.Combobox(
+            config_frame,
+            textvariable=self.target_var,
+            values=branches,
+            state="readonly"
+        )
+        if branches:
+            self.target_combo.current(0)
         self.target_combo.pack(fill=X, pady=(5, 15))
 
-        # Selección de Inicio
-        ttk.Label(config_frame, text="Punto de Partida:", font=("Segoe UI", 10, "bold"), bootstyle="primary").pack(anchor=W)
-        self.start_info_label = ttk.Label(config_frame, text="📍 Haz CLICK en el mapa para elegir", font=("Segoe UI", 9, "italic"), bootstyle="secondary")
+        ttk.Label(
+            config_frame,
+            text="Punto de Partida:",
+            font=("Segoe UI", 10, "bold"),
+            bootstyle="primary"
+        ).pack(anchor=W)
+
+        self.start_info_label = ttk.Label(
+            config_frame,
+            text="📍 Haz CLICK en el mapa para elegir",
+            font=("Segoe UI", 9, "italic"),
+            bootstyle="secondary"
+        )
         self.start_info_label.pack(anchor=W, pady=(5, 15))
 
-        self.start_btn = ttk.Button(config_frame, text="▶ INICIAR SIMULACIÓN", command=self.start_simulation, bootstyle="success")
+        self.start_btn = ttk.Button(
+            config_frame,
+            text="▶ INICIAR SIMULACIÓN",
+            command=self.start_simulation,
+            bootstyle="success"
+        )
         self.start_btn.pack(fill=X, pady=5, ipady=5)
 
-        self.inv_btn = ttk.Button(config_frame, text="📦 Ver Inventario", command=self.open_inventory_window, bootstyle="info-outline")
+        self.inv_btn = ttk.Button(
+            config_frame,
+            text="📦 Ver Inventario",
+            command=self.open_inventory_window,
+            bootstyle="info-outline"
+        )
         self.inv_btn.pack(fill=X, pady=(0, 10))
 
-        # Registros
         log_frame = ttk.Labelframe(left_panel, text="Registro (Logs)", padding=10)
         log_frame.pack(fill=BOTH, expand=YES, pady=5)
-        
-        self.log_text = ttk.Text(log_frame, height=20, width=35, font=("Consolas", 9), relief="flat")
-        self.log_text.pack(fill=BOTH, expand=YES)
 
+        self.log_text = ttk.Text(
+            log_frame,
+            height=20,
+            width=35,
+            font=("Consolas", 9),
+            relief="flat"
+        )
+        self.log_text.pack(fill=BOTH, expand=YES)
 
         # --- PANEL CENTRAL: MAPA REAL ---
         center_panel = ttk.Frame(main_frame)
         center_panel.pack(side=LEFT, fill=BOTH, expand=YES, padx=10)
-        
-        # Vista de Mapa Tkinter
-        self.map_widget = tkintermapview.TkinterMapView(center_panel, corner_radius=15, width=800, height=600)
-        self.map_widget.pack(fill=BOTH, expand=YES)
-        
-        # USAR MOSAICOS ESTÁNDAR DE GOOGLE MAPS
-        self.map_widget.set_tile_server("https://mt0.google.com/vt/lyrs=m&hl=es&x={x}&y={y}&z={z}")
 
+        # Mapa real (SIN CAMBIOS)
+        self.map_widget = tkintermapview.TkinterMapView(
+            center_panel,
+            corner_radius=15,
+            width=800,
+            height=600
+        )
+        self.map_widget.pack(fill=BOTH, expand=YES)
+
+        self.map_widget.set_tile_server(
+            "https://mt0.google.com/vt/lyrs=m&hl=es&x={x}&y={y}&z={z}"
+        )
         self.map_widget.set_position(-17.3938, -66.1570)
         self.map_widget.set_zoom(14)
-        
         self.map_widget.add_left_click_map_command(self.set_start_on_click)
 
-        # Dibujar Marcadores
+        # 🔧 MAPA INTERNO (MISMO PANEL, ENCIMA DEL MAPA)
+        self.internal_canvas = ttk.Canvas(
+            center_panel,
+            bg="#f5f5f5",
+            highlightthickness=0
+        )
+
+        self.internal_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+
+        # ⬅️ oculto por defecto (FORMA CORRECTA)
+        self.internal_canvas.place_forget()
+
+        # --- BOTÓN MAPEO INTERNO ---
+        self.internal_map_btn = ttk.Button(
+            center_panel,
+            text="🗺 Ver Mapeo Interno",
+            bootstyle="info-outline",
+            command=self.toggle_internal_map
+        )
+        self.internal_map_btn.place(relx=0.98, rely=0.02, anchor=NE)
+
         self.draw_destinations()
         self.update_start_marker()
 
-
-        # --- PANEL DERECHO (MODIFICADO) ---
-        right_panel = ttk.Labelframe(main_frame, text="Acciones dentro el supermercado: Opciones/Recoleccion/Factura", padding=10)
+        # --- PANEL DERECHO ---
+        right_panel = ttk.Labelframe(
+            main_frame,
+            text="Acciones dentro el supermercado: Opciones/Recoleccion/Factura",
+            padding=10
+        )
         right_panel.pack(side=LEFT, fill=Y, padx=10, ipadx=5)
 
-        # ===== ZONA SUPERIOR (SCROLLABLE) =====
         content_frame = ttk.Frame(right_panel)
         content_frame.pack(fill=BOTH, expand=YES)
 
@@ -133,7 +199,6 @@ class AgentUI(ttk.Window):
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
 
-        # ===== OPCIONES (Por defecto) =====
         self.options_frame = ttk.Frame(scrollable_frame)
         self.options_frame.pack(fill=BOTH, expand=YES)
 
@@ -143,27 +208,28 @@ class AgentUI(ttk.Window):
             font=("Segoe UI", 12, "italic"),
             bootstyle="secondary"
         ).pack(pady=20)
-        
-        # ===== FACTURA (ANTIGUA, AHORA OCULTA HASTA SELECCIÓN) =====
-        # La mantenemos con otro nombre para el método show_receipt, pero
-        # la eliminaremos de la vista en favor de los nuevos subpaneles.
-        self.old_receipt_frame = ttk.Frame(scrollable_frame) # No se empaqueta inicialmente
-        
-        # Usaremos el self.receipt_tree original como base para la presentación
-        # de datos finales, solo lo mostraremos en un nuevo frame.
+
+        self.old_receipt_frame = ttk.Frame(scrollable_frame)
         self.receipt_tree = self._create_receipt_tree(self.old_receipt_frame)
         self.receipt_tree.pack(fill=BOTH, expand=YES, pady=10)
-        
-        # 🔥 NUEVOS CONTENEDORES PARA EL RESULTADO FINAL
-        
-        # 1. FACTURA DEL CAJERO (Muestra self.selected_option)
-        self.cashier_receipt_frame = ttk.Labelframe(scrollable_frame, text="🧾 Factura del Cajero (Opción Elegida)", padding=10)
-        self.cashier_receipt_tree = self._create_receipt_tree(self.cashier_receipt_frame, height=8) # Más corto
+
+        self.cashier_receipt_frame = ttk.Labelframe(
+            scrollable_frame,
+            text="🧾 Factura del Cajero (Opción Elegida)",
+            padding=10
+        )
+        self.cashier_receipt_tree = self._create_receipt_tree(
+            self.cashier_receipt_frame,
+            height=8
+        )
         self.cashier_receipt_tree.pack(fill=BOTH, expand=YES)
-        
-        # 2. LISTA DE RECOLECCIÓN DEL AGENTE (Muestra el 'cart' en orden de recolección)
-        self.collection_list_frame = ttk.Labelframe(scrollable_frame, text="🛒 Lista de Recolección del Agente (Orden de Recorrido)", padding=10)
-        
+
+        self.collection_list_frame = ttk.Labelframe(
+            scrollable_frame,
+            text="🛒 Lista de Recolección del Agente (Orden de Recorrido)",
+            padding=10
+        )
+
         cols = ("qty", "prod", "unit_price")
         self.collection_tree = ttk.Treeview(
             self.collection_list_frame,
@@ -182,7 +248,6 @@ class AgentUI(ttk.Window):
         self.collection_tree.column("unit_price", width=80, anchor=E)
         self.collection_tree.pack(fill=BOTH, expand=YES)
 
-        # ===== ZONA INFERIOR FIJA (ESTADO) =====
         self.status_frame = ttk.Frame(right_panel, padding=10, bootstyle="light")
         self.status_frame.pack(fill=X, side=BOTTOM)
 
@@ -241,81 +306,276 @@ class AgentUI(ttk.Window):
         # 🔹 Resetear estado
         self.selected_option = None
 
+    def update_internal_position(self, section_name):
+        if not self.internal_map_visible:
+            return
 
-    def select_option(self, option):
-        self.log_message("Usuario eligió una opción de compra.")
+        if not hasattr(self, "internal_positions"):
+            return
+
+        if section_name not in self.internal_positions:
+            return
+
+        px, py = self.internal_positions[section_name]
+
+        def draw():
+            # Borrar marcador anterior
+            self.internal_canvas.delete("agent")
+
+            # Dibujar agente
+            self.internal_canvas.create_oval(
+                px - 8, py - 8,
+                px + 8, py + 8,
+                fill="#fbc02d",
+                outline="#f57f17",
+                width=2,
+                tags="agent"
+            )
+
+        self.after(0, draw)
         
-        # 🔥 Guardar la opción seleccionada
-        self.selected_option = option
-        
-        # Ocultar el frame de opciones para mostrar la simulación
-        self.options_frame.pack_forget()
-        # No mostramos el old_receipt_frame, mostraremos los nuevos al final
+    def _start_pan(self, event):
+        self.internal_canvas.scan_mark(event.x, event.y)
 
-        voucher_amount = float(self.amount_entry.get())
+    def _do_pan(self, event):
+        self.internal_canvas.scan_dragto(event.x, event.y, gain=1)
 
-        # 🔹 ADAPTAR FORMATO PARA EL RECOLECTOR
-        recolector_option = []
-        for item in option["items"]:
-            recolector_option.append({
-                "name": item["name"],
-                "qty": item["qty"],
-                "price": item["unit_price"]
-            })
+    def _on_mousewheel(self, event):
+        # Windows / Linux
+        self.internal_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        # 🔹 Ejecutar compra (Esto es asíncrono en _run_logic)
-        # Aquí se inicia la recolección, el resultado final se gestiona en _finalize_ui
-        # La función run_simulation ya no se llama aquí, sino en _run_logic
-        # Debemos asegurar que el hilo de simulación comience con esta opción.
+    def _on_shift_mousewheel(self, event):
+        # Scroll horizontal con Shift
+        self.internal_canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        # Puesto que select_option se llama DESPUÉS de que _run_logic terminó con el estado WAITING_SELECTION,
-        # necesitamos un mecanismo para reanudar.
-        # Por simplicidad, y dado que el código original no usa 'finalize_purchase' aquí, sino en 'Agent',
-        # asumo que 'select_option' es el punto de inicio de la recolección.
-        
-        # La estructura actual del código original llama a 'finalize_purchase' y 'show_receipt' en 'select_option'.
-        # Si queremos mostrar el recorrido del agente, necesitamos mover la lógica a un hilo
-        # y actualizar el UI al finalizar. Modificaré el flujo para adaptarlo al requerimiento.
-        
-        # SIMPLIFICACIÓN: Dado que el simulador no es en tiempo real, simplemente mostraremos
-        # el resultado final (cart) y la factura original (option).
+    def show_internal_map_fullscreen(self, supermarket_name):
 
-        cart, success = self.shopper.finalize_purchase(
-             recolector_option,
-             voucher_amount
+        # Ocultar mapa real
+        self.map_widget.place_forget()
+
+        # Mostrar canvas interno
+        self.internal_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.internal_canvas.delete("all")
+        self.internal_map_visible = True
+
+        # 🎮 Habilitar PAN con mouse
+        self.internal_canvas.bind("<ButtonPress-1>", self._start_pan)
+        self.internal_canvas.bind("<B1-Motion>", self._do_pan)
+
+        self.internal_canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.internal_canvas.bind("<Shift-MouseWheel>", self._on_shift_mousewheel)
+
+        # 🎨 Fondo tipo supermercado
+        self.internal_canvas.configure(bg="#f2efe9")
+
+        market = SUPERMARKET_MAPS[supermarket_name]
+        sections = market["sections"]
+        connections = market["connections"]
+
+        # 📐 Layout visual (más separación)
+        CELL = 220
+        OFFSET_X = 300
+        OFFSET_Y = 220
+        NODE_R = 16
+
+        self.internal_positions = {}
+
+        # 🔗 Dibujar conexiones (pasillos)
+        for src, targets in connections.items():
+            x1, y1 = sections[src]
+            px1 = OFFSET_X + x1 * CELL
+            py1 = OFFSET_Y + y1 * CELL
+
+            for dst in targets:
+                x2, y2 = sections[dst]
+                px2 = OFFSET_X + x2 * CELL
+                py2 = OFFSET_Y + y2 * CELL
+
+                self.internal_canvas.create_line(
+                    px1, py1, px2, py2,
+                    fill="#b0bec5",
+                    width=4,
+                    smooth=True
+                )
+
+        # 🟢 Dibujar nodos
+        for name, (x, y) in sections.items():
+            px = OFFSET_X + x * CELL
+            py = OFFSET_Y + y * CELL
+            self.internal_positions[name] = (px, py)
+
+            # Color especial
+            if name.lower() == "entrada":
+                color = "#2ecc71"
+            elif name.lower() == "caja":
+                color = "#e74c3c"
+            else:
+                color = "white"
+
+            # Nodo
+            self.internal_canvas.create_oval(
+                px - NODE_R, py - NODE_R,
+                px + NODE_R, py + NODE_R,
+                fill=color,
+                outline="#37474f",
+                width=2
+            )
+
+            # Texto
+            text_id = self.internal_canvas.create_text(
+                px, py + 36,
+                text=name,
+                font=("Segoe UI", 9, "bold"),
+                fill="#263238",
+                anchor="n"
+            )
+
+            # Fondo del texto
+            x1, y1, x2, y2 = self.internal_canvas.bbox(text_id)
+            rect = self.internal_canvas.create_rectangle(
+                x1 - 6, y1 - 3, x2 + 6, y2 + 3,
+                fill="white",
+                outline=""
+            )
+            self.internal_canvas.tag_raise(text_id)
+
+        # 🧭 IMPORTANTE: permitir desplazamiento
+        self.internal_canvas.configure(
+            scrollregion=self.internal_canvas.bbox("all")
         )
-        
-        # 🔹 Mostrar resultado en los NUEVOS PANELES
+
+    def hide_internal_map(self):
+        self.internal_canvas.place_forget()
+        self.map_widget.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.internal_map_visible = False
+
+    def toggle_internal_map(self):
+        if not self.current_supermarket:
+            self.log_message("⚠ El agente aún no llegó al supermercado.")
+            return
+
+        if self.internal_map_visible:
+            self.hide_internal_map()
+        else:
+            self.show_internal_map_fullscreen(self.current_supermarket)
+
+    def clear_internal_map(self):
+        for m in self.internal_nodes:
+            m.delete()
+        for p in self.internal_paths:
+            p.delete()
+
+        self.internal_nodes.clear()
+        self.internal_paths.clear()
+
+    def show_internal_map(self, supermarket_name):
+        self.clear_internal_map()
+
+        market = SUPERMARKET_MAPS[supermarket_name]
+        sections = market["sections"]
+        connections = market["connections"]
+
+        # Escala visual simple (para que se vea grande)
+        SCALE = 0.0003
+        BASE_LAT, BASE_LON = self.map_data.get_coordinates(supermarket_name)
+
+        # Dibujar nodos (secciones)
+        for name, (x, y) in sections.items():
+            lat = BASE_LAT + y * SCALE
+            lon = BASE_LON + x * SCALE
+
+            marker = self.map_widget.set_marker(
+                lat, lon,
+                text=name,
+                marker_color_outside="#455a64",
+                marker_color_circle="white"
+            )
+            self.internal_nodes.append(marker)
+
+        # Dibujar conexiones
+        for src, targets in connections.items():
+            for dst in targets:
+                x1, y1 = sections[src]
+                x2, y2 = sections[dst]
+
+                lat1 = BASE_LAT + y1 * SCALE
+                lon1 = BASE_LON + x1 * SCALE
+                lat2 = BASE_LAT + y2 * SCALE
+                lon2 = BASE_LON + x2 * SCALE
+
+                path = self.map_widget.set_path(
+                    [(lat1, lon1), (lat2, lon2)],
+                    width=2
+                )
+                self.internal_paths.append(path)
+
+    def _finalize_collection_ui(self, cart, success):
         self.show_final_results(cart, self.selected_option)
 
-        # 🔹 ACTUALIZAR INVENTARIO
-        counter = Counter([p["name"] for p in cart])
-        self.last_purchase_counts = counter
+        from collections import Counter
+        self.last_purchase_counts = Counter([p["name"] for p in cart])
 
-        if self.refresh_inventory_callback:
-            try:
-                self.refresh_inventory_callback()
-            except Exception:
-                self.refresh_inventory_callback = None
-
-        # 🔹 ACTUALIZAR ESTADO FINAL
         if success:
             self.status_label.configure(
                 text="¡COMPRA FINALIZADA!",
                 bootstyle="success"
             )
-            self.log_message("Compra finalizada correctamente.")
         else:
             self.status_label.configure(
                 text="ERROR EN COMPRA",
                 bootstyle="danger"
             )
-            self.log_message("Error en la compra.")
 
         self.start_btn.configure(
             state=NORMAL,
             text="▶ INICIAR SIMULACIÓN"
         )
+
+    def _run_collection_logic(self, recolector_option, voucher_amount):
+        try:
+            cart, success = self.shopper.finalize_purchase(
+                recolector_option,
+                voucher_amount,
+                move_callback=self.update_internal_position
+            )
+
+            # 🔁 Volver al hilo UI
+            self.after(
+                0,
+                lambda: self._finalize_collection_ui(cart, success)
+            )
+
+        except Exception as e:
+            self.after(0, lambda: self.log_message(f"Error en recolección: {e}"))
+
+    def select_option(self, option):
+        self.log_message("Usuario eligió una opción de compra.")
+        self.selected_option = option
+
+        self.options_frame.pack_forget()
+        voucher_amount = float(self.amount_entry.get())
+
+        recolector_option = [
+            {
+                "name": item["name"],
+                "qty": item["qty"],
+                "price": item["unit_price"]
+            }
+            for item in option["items"]
+        ]
+
+        self.status_label.configure(
+            text="RECOLECTANDO PRODUCTOS...",
+            bootstyle="warning"
+        )
+
+        # 🔥 EJECUTAR EN HILO
+        thread = threading.Thread(
+            target=self._run_collection_logic,
+            args=(recolector_option, voucher_amount)
+        )
+        thread.daemon = True
+        thread.start()
     
     # 🔥 NUEVAS FUNCIONES DE VISUALIZACIÓN
     def show_final_results(self, cart, original_option):
@@ -556,6 +816,10 @@ class AgentUI(ttk.Window):
             )
 
     def start_simulation(self):
+        self.clear_internal_map()
+        self.internal_map_visible = False
+        self.current_supermarket = None
+
         self.reset_right_panel()
 
         self.status_label.configure(
@@ -624,6 +888,8 @@ class AgentUI(ttk.Window):
 
     def _run_logic(self, start_coords, target_name, amount):
         try:
+            self.current_supermarket = target_name
+
             target_coords = self.map_data.get_coordinates(target_name)
             
             path = self.shopper.planner.find_path(start_coords, target_coords)
@@ -637,6 +903,7 @@ class AgentUI(ttk.Window):
 
             if state == "WAITING_SELECTION":
                 self.after(0, lambda: self.show_optimizer_options(result))
+                self.after(0, lambda: self.show_internal_map_fullscreen(target_name)) 
                 return
 
             self.after(0, lambda: self._finalize_ui(result, state))
