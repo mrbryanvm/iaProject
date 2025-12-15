@@ -39,7 +39,8 @@ class AgentUI(ttk.Window):
         self.initial_stock = {p['name']: p.get('stock', 0) for p in PRODUCTS}
         
         # Estado de última compra (para resaltar en inventario)
-        self.last_purchase_counts = {}
+        # Estructura: {"supermarket_name": "Nombre", "items": {producto: cantidad}}
+        self.last_purchase_history = None 
         self.refresh_inventory_callback = None
 
         # 🔥 NUEVO ESTADO: Opcion seleccionada por el usuario
@@ -513,8 +514,14 @@ class AgentUI(ttk.Window):
         self.show_final_results(cart, self.selected_option)
 
         from collections import Counter
-        self.last_purchase_counts = Counter([p["name"] for p in cart])
-
+        # Guardar historial con contexto de sucursal
+        if success and self.current_supermarket:
+            items_count = Counter([p["name"] for p in cart])
+            self.last_purchase_history = {
+                "supermarket_name": self.current_supermarket,
+                "items": items_count
+            }
+        
         if success:
             self.status_label.configure(
                 text="¡COMPRA FINALIZADA!",
@@ -546,7 +553,8 @@ class AgentUI(ttk.Window):
             )
 
         except Exception as e:
-            self.after(0, lambda: self.log_message(f"Error en recolección: {e}"))
+            err_msg = str(e)
+            self.after(0, lambda: self.log_message(f"Error en recolección: {err_msg}"))
 
     def select_option(self, option):
         self.log_message("Usuario eligió una opción de compra.")
@@ -909,7 +917,6 @@ class AgentUI(ttk.Window):
             self.after(0, lambda: self._finalize_ui(result, state))
         
         except Exception as e:
-            print(f"Logic Error: {e}")
             self.log_message(f"Error Crítico: {e}")
             self.after(0, lambda: self._reset_ui_state())
 
@@ -919,46 +926,64 @@ class AgentUI(ttk.Window):
 
     def open_inventory_window(self):
         inv_window = ttk.Toplevel(self)
-        inv_window.title("Inventario de Productos")
-        inv_window.geometry("700x600") # Un poco más ancho para la nueva columna
+        inv_window.title("Inventario de Productos por Sucursal")
+        inv_window.geometry("750x650")
+
+        # --- Selector de Sucursal ---
+        from data.inventory import get_stock
+        from data.supermarket_maps import SUPERMARKET_MAPS
         
-        # Título
-        ttk.Label(inv_window, text="Estado de Stock", font=("Segoe UI", 14, "bold"), bootstyle="primary").pack(pady=10)
+        frame_top = ttk.Frame(inv_window, padding=10)
+        frame_top.pack(fill=X)
         
-        # Tabla
+        ttk.Label(frame_top, text="Seleccionar Sucursal:", bootstyle="primary").pack(side=LEFT, padx=5)
+        
+        branch_names = list(SUPERMARKET_MAPS.keys())
+        branch_names.sort()
+        
+        combo_branch = ttk.Combobox(frame_top, values=branch_names, state="readonly", width=40)
+        if branch_names:
+            combo_branch.current(0) # Seleccionar el primero por defecto
+        combo_branch.pack(side=LEFT, padx=5)
+
+        # --- Tabla ---
         cols = ("prod", "price", "stock", "last_qty")
         tree = ttk.Treeview(inv_window, columns=cols, show="headings", height=20)
         
         tree.heading("prod", text="Producto")
-        tree.column("prod", width=280, anchor=W)
-        
-        tree.heading("price", text="Precio")
-        tree.column("price", width=80, anchor=E)
-        
-        tree.heading("stock", text="Stock")
-        tree.column("stock", width=80, anchor=CENTER)
-
+        tree.heading("price", text="Precio (Bs)")
+        tree.heading("stock", text="Stock Disp.")
         tree.heading("last_qty", text="Últ. Compra")
-        tree.column("last_qty", width=100, anchor=CENTER)
         
-        # Scrollbar
-        scroll = ttk.Scrollbar(inv_window, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
+        tree.column("prod", width=250)
+        tree.column("price", width=100, anchor="center")
+        tree.column("stock", width=100, anchor="center")
+        tree.column("last_qty", width=100, anchor="center")
         
-        tree.pack(side=TOP, fill=BOTH, expand=YES, padx=10)
-        scroll.place(relx=0.95, rely=0.1, relheight=0.8, anchor=NE)
+        scrollbar = ttk.Scrollbar(inv_window, orient="vertical", command=tree.yview)
+        tree.configure(yscroll=scrollbar.set)
         
-        # Llenar datos con lógica mejorada
-        def load_data():
-            if not tree.winfo_exists(): return
+        scrollbar.pack(side=RIGHT, fill=Y)
+        tree.pack(fill=BOTH, expand=True, padx=10, pady=5)
 
-            tree.delete(*tree.get_children())
+        def load_data(event=None):
+            selected_branch = combo_branch.get()
             
-            # Refinamiento: Productos comprados arriba (ordenados por cantidad desc), resto abajo (alfabético)
-            purchased = [p for p in PRODUCTS if self.last_purchase_counts.get(p['name'], 0) > 0]
-            others = [p for p in PRODUCTS if self.last_purchase_counts.get(p['name'], 0) == 0]
+            # Limpiar
+            for i in tree.get_children():
+                tree.delete(i)
+                
+            # Determinar si mostrar historial de compra para esta sucursal
+            relevant_history = {}
+            if self.last_purchase_history and self.last_purchase_history.get("supermarket_name") == selected_branch:
+                relevant_history = self.last_purchase_history.get("items", {})
+
+            # Clasificar
+            purchased = [p for p in PRODUCTS if relevant_history.get(p['name'], 0) > 0]
+            others = [p for p in PRODUCTS if relevant_history.get(p['name'], 0) == 0]
             
-            purchased.sort(key=lambda x: self.last_purchase_counts.get(x['name'], 0), reverse=True)
+            # Ordenar
+            purchased.sort(key=lambda x: relevant_history.get(x['name'], 0), reverse=True)
             others.sort(key=lambda x: x['name'])
             
             final_list = purchased + others
@@ -966,55 +991,56 @@ class AgentUI(ttk.Window):
             for p in final_list:
                 name = p['name']
                 price = p['price']
-                stock = p.get('stock', 0)
-                last_qty = self.last_purchase_counts.get(name, 0)
+                # OBTENER STOCK ESPECÍFICO DE LA SUCURSAL
+                stock = get_stock(selected_branch, name)
                 
+                last_qty = relevant_history.get(name, 0)
                 last_qty_str = str(last_qty) if last_qty > 0 else "-"
-                
-                # Tags
+
                 tags = []
-                if last_qty > 0: tags.append("purchased")
+                if last_qty > 0:
+                    tags.append("purchased")
                 
-                if stock == 0: tags.append("critical")
-                elif stock < 10: tags.append("low")
-                else: tags.append("normal") # default
-                
+                if stock == 0:
+                    tags.append("out_of_stock")
+                elif stock < 10:
+                    tags.append("low_stock")
+
                 tree.insert("", END, values=(name, f"{price:.2f}", stock, last_qty_str), tags=tuple(tags))
             
-            # Configuración de Colores
-            tree.tag_configure("critical", foreground="#d32f2f") # Texto Rojo (Agotado)
-            tree.tag_configure("low", foreground="#ef6c00") # Texto Naranja (Bajo)
-            tree.tag_configure("normal", foreground="black")
-            
-            # Resaltado de compra (Fondo)
-            tree.tag_configure("purchased", background="#c8e6c9") # Verde suave estilo Excel
+            # Colores
+            tree.tag_configure("purchased", background="#c8e6c9") # Verde claro
+            tree.tag_configure("low_stock", foreground="orange")
+            tree.tag_configure("out_of_stock", foreground="red")
 
+        # Bind del combo
+        combo_branch.bind("<<ComboboxSelected>>", load_data)
+
+        # Cargar inicial
         load_data()
         
-        # Registrar callback para auto-refresh
         self.refresh_inventory_callback = load_data
         
-        # Limpiar callback al cerrar
+        # Botón manual de refresco
+        btn_refresh = ttk.Button(inv_window, text="🔄 Refrescar Datos", command=load_data, bootstyle="info-outline")
+        btn_refresh.pack(pady=10)
+        
+        # Boton reset global (podríamos mejorarlo para resetear solo la sucursal, pero por ahora global es simple)
+        def reset_stock_action():
+             from data.inventory import reset_stock_for_branch
+             current_branch = combo_branch.get()
+             reset_stock_for_branch(current_branch)
+             load_data()
+             self.log_message(f"Sistema: Stock de {current_branch} reseteado.")
+
+        ttk.Button(inv_window, text="⚙️ Resetear Stock de Sucursal", bootstyle="warning", command=reset_stock_action).pack(pady=5)
+
+        # Protocolo de cierre
         def on_close():
             self.refresh_inventory_callback = None
             inv_window.destroy()
             
         inv_window.protocol("WM_DELETE_WINDOW", on_close)
-        
-        # Botones
-        btn_frame = ttk.Frame(inv_window, padding=10)
-        btn_frame.pack(fill=X, side=BOTTOM)
-        
-        def reset_stock_action():
-            for p in PRODUCTS:
-                p['stock'] = self.initial_stock.get(p['name'], 0)
-            
-            load_data()
-            self.log_message("Sistema: Stock reseteado a valores originales.")
-            
-        ttk.Button(btn_frame, text="🔄 Refrescar", bootstyle="info", command=load_data).pack(side=LEFT, fill=X, expand=YES, padx=5)
-        ttk.Button(btn_frame, text="⚙️ Resetear Stock", bootstyle="warning", command=reset_stock_action).pack(side=LEFT, fill=X, expand=YES, padx=5)
-        ttk.Button(btn_frame, text="Cerrar", bootstyle="secondary", command=on_close).pack(side=RIGHT, fill=X, expand=YES, padx=5)
 
 
 if __name__ == "__main__":
