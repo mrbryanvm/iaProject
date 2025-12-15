@@ -124,4 +124,4 @@ class RecolectorAgent:
                         f"  Recolectado: {product['name']} ({product['price']} Bs)"
                     )
                     cart.append(product)
-                    time.sleep(2)
+                    time.sleep(0.1)
