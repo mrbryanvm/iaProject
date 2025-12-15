@@ -49,7 +49,7 @@ class RecolectorAgent:
 
         cart = []
 
-        # 3️⃣ EJECUTAR RECORRIDO
+        # 3️⃣ EJECUTAR RECORRIDO PLANIFICADO
         current_section = planned_route[0]
 
         if move_callback:
@@ -73,6 +73,30 @@ class RecolectorAgent:
                     log_callback
                 )
                 remaining_sections.remove(section)
+
+        # 4️⃣ 🔒 GARANTIZAR LLEGADA REAL A CAJA (FIX)
+        if current_section != exit_section:
+            log_callback("⚠️ No se llegó a Caja. Recalculando ruta final...")
+
+            path_to_exit = self._bfs_path(
+                current_section,
+                exit_section,
+                connections
+            )
+
+            if path_to_exit:
+                for section in path_to_exit[1:]:
+                    log_callback(f"Moviéndose a sección: {section}")
+
+                    if move_callback:
+                        move_callback(section)
+
+                    time.sleep(0.3)
+                    current_section = section
+            else:
+                log_callback(
+                    "❌ ERROR CRÍTICO: No existe camino a Caja desde la posición actual"
+                )
 
         log_callback("Recolección finalizada. Llegó a Caja.")
         return cart
