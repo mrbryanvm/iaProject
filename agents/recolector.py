@@ -69,6 +69,7 @@ class RecolectorAgent:
                 self._collect_section_products(
                     section,
                     products_by_section,
+                    supermarket_name,
                     cart,
                     log_callback
                 )
@@ -210,19 +211,28 @@ class RecolectorAgent:
         self,
         section,
         products_by_section,
+        supermarket_name,
         cart,
         log_callback
     ):
         """
         Recolecta TODO lo que pertenece a una sección.
         """
+        from data.inventory import reduce_stock
+
         for entry in products_by_section.get(section, []):
             product = entry["product"]
             qty = entry["qty"]
 
             for _ in range(qty):
-                log_callback(
-                    f"  Recolectado: {product['name']} ({product['price']} Bs)"
-                )
-                cart.append(product)
+                # Intentar reducir stock real
+                if reduce_stock(supermarket_name, product['name'], 1):
+                    log_callback(
+                        f"  Recolectado: {product['name']} ({product['price']} Bs)"
+                    )
+                    cart.append(product)
+                else:
+                    log_callback(
+                        f"  ⚠️ Error: Stock insuficiente para {product['name']} en {section}"
+                    )
                 time.sleep(0.2)

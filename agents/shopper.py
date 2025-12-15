@@ -79,7 +79,7 @@ class ShopperAgent:
         self.log("Comprador: Seleccionando productos...")
 
         # 🔹 OPTIMIZADOR SOLO GENERA OPCIONES
-        options = self.optimizer.generate_options(voucher_amount)
+        options = self.optimizer.generate_options(voucher_amount, self.supermarket_name)
 
         if not options:
             self.log("Optimizador: No se pudieron generar opciones.")
@@ -88,31 +88,6 @@ class ShopperAgent:
         # ⛔ AQUÍ SE DETIENE EL FLUJO
         # La UI ahora debe mostrar las opciones
         return options, "WAITING_SELECTION"
-
-
-        # 3. Fase de Optimización
-        # Simular tiempo de pensamiento
-        time.sleep(1.0)
-        cart = self.optimizer.optimize_cart(voucher_amount)
-
-        if not cart:
-            self.log("Optimizador: Fallo al encontrar coincidencia exacta para el monto del vale.")
-            return None, False
-        
-        self.log("Optimizador: ¡Vale agotado!")
-        for item in cart:
-            self.log(f"  + Agregado: {item['name']} ({item['price']} Bs)")
-
-        # 4. Fase de Pago (Caja)
-        self.log("Comprador: Pagando en Caja...")
-        success, total = self.cashier.checkout(cart, voucher_amount)
-
-        if success:
-            self.log(f"Cajero: ¡Pago Aceptado! Total: {total:.2f}")
-            return cart, True
-        else:
-            self.log(f"Cajero: Pago Rechazado. Total {total:.2f} != Vale {voucher_amount}")
-            return cart, False
         
     def finalize_purchase(self, option, voucher_amount, move_callback=None):
         self.log("Comprador: Opción confirmada.")
@@ -125,8 +100,6 @@ class ShopperAgent:
             move_callback=move_callback  
         )
 
-        # Confirmar stock
-        self.optimizer.commit_stock(cart)
 
         self.log("Comprador: Pagando en caja...")
         success, total = self.cashier.checkout(cart, voucher_amount)
