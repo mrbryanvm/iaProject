@@ -11,6 +11,7 @@ import tkintermapview
 from agents.shopper import ShopperAgent
 from data.map_data import MapData
 from data.products import PRODUCTS
+from data.supermarket_maps import SUPERMARKET_MAPS
 from collections import Counter
 
 class AgentUI(ttk.Window):
@@ -27,6 +28,12 @@ class AgentUI(ttk.Window):
         self.current_agent_marker = None
         self.start_marker = None
         self.path_line = None
+
+        # Estado visual interno
+        self.internal_map_visible = False
+        self.internal_nodes = []
+        self.internal_paths = []
+        self.current_supermarket = None
         
         # Guardar stock inicial para reset
         self.initial_stock = {p['name']: p.get('stock', 0) for p in PRODUCTS}
@@ -104,6 +111,15 @@ class AgentUI(ttk.Window):
         self.map_widget.set_zoom(14)
         
         self.map_widget.add_left_click_map_command(self.set_start_on_click)
+
+        # --- BOTÓN MAPEO INTERNO ---
+        self.internal_map_btn = ttk.Button(
+            center_panel,
+            text="🗺 Ver Mapeo Interno",
+            bootstyle="info-outline",
+            command=self.toggle_internal_map
+        )
+        self.internal_map_btn.place(relx=0.98, rely=0.02, anchor=NE)
 
         # Dibujar Marcadores
         self.draw_destinations()
@@ -241,6 +257,79 @@ class AgentUI(ttk.Window):
         # 🔹 Resetear estado
         self.selected_option = None
 
+    def update_internal_position(self, section_name):
+        market = SUPERMARKET_MAPS[self.current_supermarket]
+        x, y = market["sections"][section_name]
+
+        SCALE = 0.0003
+        base_lat, base_lon = self.map_data.get_coordinates(self.current_supermarket)
+
+        lat = base_lat + y * SCALE
+        lon = base_lon + x * SCALE
+
+        self.after(0, lambda: self.update_agent_position((lat, lon)))
+
+    def toggle_internal_map(self):
+        if not self.current_supermarket:
+            self.log_message("⚠ El agente aún no llegó al supermercado.")
+            return
+
+        if self.internal_map_visible:
+            self.clear_internal_map()
+            self.internal_map_visible = False
+        else:
+            self.show_internal_map(self.current_supermarket)
+            self.internal_map_visible = True
+
+    def clear_internal_map(self):
+        for m in self.internal_nodes:
+            m.delete()
+        for p in self.internal_paths:
+            p.delete()
+
+        self.internal_nodes.clear()
+        self.internal_paths.clear()
+
+    def show_internal_map(self, supermarket_name):
+        self.clear_internal_map()
+
+        market = SUPERMARKET_MAPS[supermarket_name]
+        sections = market["sections"]
+        connections = market["connections"]
+
+        # Escala visual simple (para que se vea grande)
+        SCALE = 0.0003
+        BASE_LAT, BASE_LON = self.map_data.get_coordinates(supermarket_name)
+
+        # Dibujar nodos (secciones)
+        for name, (x, y) in sections.items():
+            lat = BASE_LAT + y * SCALE
+            lon = BASE_LON + x * SCALE
+
+            marker = self.map_widget.set_marker(
+                lat, lon,
+                text=name,
+                marker_color_outside="#455a64",
+                marker_color_circle="white"
+            )
+            self.internal_nodes.append(marker)
+
+        # Dibujar conexiones
+        for src, targets in connections.items():
+            for dst in targets:
+                x1, y1 = sections[src]
+                x2, y2 = sections[dst]
+
+                lat1 = BASE_LAT + y1 * SCALE
+                lon1 = BASE_LON + x1 * SCALE
+                lat2 = BASE_LAT + y2 * SCALE
+                lon2 = BASE_LON + x2 * SCALE
+
+                path = self.map_widget.set_path(
+                    [(lat1, lon1), (lat2, lon2)],
+                    width=2
+                )
+                self.internal_paths.append(path)
 
     def select_option(self, option):
         self.log_message("Usuario eligió una opción de compra.")
@@ -282,7 +371,8 @@ class AgentUI(ttk.Window):
 
         cart, success = self.shopper.finalize_purchase(
              recolector_option,
-             voucher_amount
+             voucher_amount,
+             move_callback=self.update_internal_position
         )
         
         # 🔹 Mostrar resultado en los NUEVOS PANELES
@@ -556,6 +646,10 @@ class AgentUI(ttk.Window):
             )
 
     def start_simulation(self):
+        self.clear_internal_map()
+        self.internal_map_visible = False
+        self.current_supermarket = None
+
         self.reset_right_panel()
 
         self.status_label.configure(
@@ -624,6 +718,8 @@ class AgentUI(ttk.Window):
 
     def _run_logic(self, start_coords, target_name, amount):
         try:
+            self.current_supermarket = target_name
+
             target_coords = self.map_data.get_coordinates(target_name)
             
             path = self.shopper.planner.find_path(start_coords, target_coords)
