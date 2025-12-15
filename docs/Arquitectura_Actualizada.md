@@ -3,16 +3,16 @@
 ```mermaid
 graph TD
     %% Roles y Actores
-    User((Usuario))
-    UI[Interfaz Gráfica (AgentUI)]
+    User(Usuario)
+    UI[Interfaz Gráfica - AgentUI]
     
     %% Agentes
     subgraph "Sistema Multi-Agente"
-        Shopper[🤖 ShopperAgent\n(Orquestador)]
-        Planner[🗺️ PlannerAgent\n(Utilidad - OSRM)]
-        Optimizer[🧠 OptimizerAgent\n(Objetivos - Greedy+)]
-        Recolector[🛒 RecolectorAgent\n(Objetivos - BFS)]
-        Cashier[💵 CashierAgent\n(Reactivo Simple)]
+        Shopper[ShopperAgent - Orquestador]
+        Planner[PlannerAgent - Utilidad OSRM]
+        Optimizer[OptimizerAgent - Objetivos Greedy]
+        Recolector[RecolectorAgent - Objetivos BFS]
+        Cashier[CashierAgent - Reactivo Simple]
     end
 
     %% Datos y Servicios
@@ -20,7 +20,7 @@ graph TD
         MapData[(Datos Mapa Geográfico)]
         InternalMaps[(Mapas Internos Supermercados)]
         Products[(Catálogo Productos + Stock)]
-        OSRM(🌐 API OSRM)
+        OSRM(API OSRM)
     end
 
     %% Relaciones - Flujo Principal
@@ -40,11 +40,11 @@ graph TD
     Shopper -->|Presenta Opciones| UI
     User -->|Selecciona Opción| UI
     
-    %% Fase 3: Recolección (NUEVO)
+    %% Fase 3: Recolección
     UI -->|Confirma Selección| Shopper
     Shopper -->|Delega Recolección| Recolector
     Recolector -->|Lee Layout| InternalMaps
-    Recolector -->|Planifica Ruta Interna (BFS)| Recolector
+    Recolector -->|Planifica Ruta Interna BFS| Recolector
     Recolector -->|Recolecta Productos| Products
     Recolector -->|Retorna Carrito Físico| Shopper
     
