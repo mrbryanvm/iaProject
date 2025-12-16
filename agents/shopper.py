@@ -7,6 +7,7 @@ import time
 from .planner import PlannerAgent
 from .optimizer import OptimizerAgent
 from .cashier import CashierAgent
+from .recolector import RecolectorAgent
 from data.map_data import MapData
 from data.products import PRODUCTS
 
@@ -16,8 +17,13 @@ class ShopperAgent:
         self.planner = PlannerAgent(self.map_data)
         self.optimizer = OptimizerAgent(PRODUCTS)
         self.cashier = CashierAgent()
+        self.recolector = RecolectorAgent()
         self.log_callback = log_callback # Función para enviar logs a la UI
+        self.supermarket_name = ""  # Variable para almacenar el nombre del supermercado
 
+    def request_purchase_options(self, voucher_amount):
+        return self.optimizer.generate_options(voucher_amount, self.supermarket_name)
+    
     def log(self, message):
         if self.log_callback:
             self.log_callback(message)
@@ -35,6 +41,7 @@ class ShopperAgent:
             self.log(f"Error: Destino {target_name} no encontrado.")
             return None, False
 
+        self.supermarket_name = target_name # Guardar el nombre del supermercado
         self.log(f"--- Simulación Iniciada ---")
         self.log(f"Inicio: {start_coords[0]:.4f}, {start_coords[1]:.4f}")
         self.log(f"Meta: {target_name} ({voucher_amount} Bs)")
@@ -71,26 +78,36 @@ class ShopperAgent:
         self.log(f"Comprador: Llegada a {target_name}")
         self.log("Comprador: Seleccionando productos...")
 
-        # 3. Fase de Optimización
-        # Simular tiempo de pensamiento
-        time.sleep(1.0)
-        cart = self.optimizer.optimize_cart(voucher_amount)
+        # 🔹 OPTIMIZADOR SOLO GENERA OPCIONES
+        options = self.optimizer.generate_options(voucher_amount, self.supermarket_name)
 
-        if not cart:
-            self.log("Optimizador: Fallo al encontrar coincidencia exacta para el monto del vale.")
+        if not options:
+            self.log("Optimizador: No se pudieron generar opciones.")
             return None, False
         
-        self.log("Optimizador: ¡Vale agotado!")
-        for item in cart:
-            self.log(f"  + Agregado: {item['name']} ({item['price']} Bs)")
+        # ⛔ AQUÍ SE DETIENE EL FLUJO
+        # La UI ahora debe mostrar las opciones
+        return options, "WAITING_SELECTION"
+        
+    def finalize_purchase(self, option, voucher_amount, move_callback=None):
+        self.log("Comprador: Opción confirmada.")
+        self.log("Recolector: Iniciando recorrido interno...")
 
-        # 4. Fase de Pago (Caja)
-        self.log("Comprador: Pagando en Caja...")
+        cart = self.recolector.collect(
+            option,
+            self.supermarket_name,
+            log_callback=self.log,
+            move_callback=move_callback  
+        )
+
+
+        self.log("Comprador: Pagando en caja...")
         success, total = self.cashier.checkout(cart, voucher_amount)
 
         if success:
             self.log(f"Cajero: ¡Pago Aceptado! Total: {total:.2f}")
             return cart, True
         else:
-            self.log(f"Cajero: Pago Rechazado. Total {total:.2f} != Vale {voucher_amount}")
+            self.log(f"Cajero: Pago Rechazado ({total:.2f})")
             return cart, False
+
